@@ -52,11 +52,17 @@ let connection_handler ~sw :
     let frame ~opcode ~is_fin ~len:_ payload =
       match (opcode : Httpun_ws.Websocket.Opcode.t) with
       | #Httpun_ws.Websocket.Opcode.standard_non_control as kind ->
+        let chunks = Buffer.create 16 in
         let rec on_read bs ~off ~len =
-          Httpun_ws.Wsd.schedule wsd ~is_fin ~kind bs ~off ~len;
-          Httpun_ws.Payload.schedule_read payload ~on_eof:ignore ~on_read
+          Buffer.add_string chunks (Bigstringaf.substring bs ~off ~len);
+          Httpun_ws.Payload.schedule_read payload ~on_eof ~on_read
+        and on_eof () =
+          let data = Buffer.contents chunks in
+          let payload = Bytes.of_string data in
+          Httpun_ws.Wsd.send_bytes wsd ~is_fin ~kind payload ~off:0
+            ~len:(Bytes.length payload)
         in
-        Httpun_ws.Payload.schedule_read payload ~on_eof:ignore ~on_read
+        Httpun_ws.Payload.schedule_read payload ~on_eof ~on_read
       | `Connection_close -> close_with_payload payload
       | `Ping -> pong payload
       | `Pong

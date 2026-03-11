@@ -21,10 +21,13 @@ jobs:
             extra-substituters = https://anmonteiro.nix-cache.workers.dev
             extra-trusted-public-keys = ocaml.nix-cache.com-1:/xI2h2+56rwFfKyyFVbkJSeGqSIYMC/Je+7XXqGKDIY=
       - name: Build Eio Autobahn testee
-        run: nix develop -c dune build examples/eio/autobahn_testee.exe
+        run: >
+          nix-shell ./nix/ci/test.nix --argstr ocamlVersion 5_2
+          --run 'dune build examples/eio/autobahn_testee.exe'
       - name: Run Eio Autobahn testee
         run: |
-          nix develop -c dune exec examples/eio/autobahn_testee.exe -- -p 9001 \
+          nix-shell ./nix/ci/test.nix --argstr ocamlVersion 5_2 \
+            --run '_build/default/examples/eio/autobahn_testee.exe -p 9001' \
             >"$RUNNER_TEMP/autobahn-testee.log" 2>&1 &
           echo $! >"$RUNNER_TEMP/autobahn-testee.pid"
       - name: Wait for testee
