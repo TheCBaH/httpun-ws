@@ -99,10 +99,25 @@ let rec _next_read_operation t =
         (* we just don't advance the request queue in the case of a parser
           error. *)
         op
-      | `Read as op ->
-        (* Keep reading when in a "partial" state (`Read). *)
+      | `Read ->
+        (* The frame just completed may not be the only one already fully parsed and
+           sitting in [frame_queue] -- Angstrom's [skip_many] parses every frame it can
+           from whatever was fed to it in one [read] call, but [handler] only dispatches
+           the first via [frame_handler]; the rest wait here for [advance_frame_queue].
+           Returning `Read directly after advancing exactly one frame stops here and
+           forces the runtime to perform another real socket read before this function is
+           called again, even though further already-received, already-parsed frames may
+           still be queued with nothing more needed to dispatch them. If nothing further
+           ever arrives on the wire (the peer already sent everything, e.g. several
+           WebSocket frames fired back-to-back with no yield in between), those frames are
+           never dispatched: the connection stalls silently and permanently, with no error,
+           no timeout, and no CPU usage, since the runtime is genuinely blocked in that next
+           real read. Recursing here (matching the `Close case just below, which already
+           does this) drains every already-ready frame before yielding back to the runtime
+           for an actual read, exactly as an idle connection expects "nothing left to
+           advance" before it goes to sleep on the socket. *)
         advance_frame_queue t;
-        op
+        _next_read_operation t
       | `Close ->
         advance_frame_queue t;
         _next_read_operation t
